@@ -1,0 +1,1 @@
+語言為python，框架FastAPI，會用python-socketio實現即時通訊
