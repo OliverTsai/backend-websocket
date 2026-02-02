@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket聊天室</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .chat-container {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px 5px 0 0;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .message-others {
+            background-color: #e5e5ea;
+            align-self: flex-start;
+            margin-right: auto;
+            text-align: left;
+        }
+        
+        .message-self {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .system-message {
+            background-color: #e6e6e6;
+            text-align: center;
+            padding: 5px;
+            margin: 5px 0;
+            font-style: italic;
+            width: 100%;
+        }
+        
+        .user-joined, .user-left {
+            color: #555;
+            font-size: 0.9em;
+        }
+        
+        .input-area {
+            display: flex;
+            margin-top: 10px;
+        }
+        
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+        }
+        
+        #send-button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+        
+        #send-button:hover {
+            background-color: #45a049;
+        }
+        
+        .nickname-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        #nickname-input {
+            padding: 10px;
+            width: 200px;
+            margin-right: 10px;
+        }
+        
+        #join-button {
+            padding: 10px 20px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        #join-button:hover {
+            background-color: #0b7dda;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* 添加訊息容器樣式，使用 flex 布局 */
+        #messages {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket聊天室</h1>
+    
+    <div id="login-screen">
+        <div class="nickname-container">
+            <input type="text" id="nickname-input" placeholder="請輸入你的暱稱">
+            <button id="join-button">加入聊天室</button>
+        </div>
+    </div>
+    
+    <div id="chat-screen" class="hidden">
+        <div class="chat-container">
+            <div class="chat-header">聊天室</div>
+            <div id="messages" class="messages"></div>
+            <div class="input-area">
+                <input type="text" id="message-input" placeholder="輸入訊息...">
+                <button id="send-button">發送</button>
+            </div>
+        </div>
+        <p><small>輸入 /quit 可以離開聊天室</small></p>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginScreen = document.getElementById('login-screen');
+            const chatScreen = document.getElementById('chat-screen');
+            const nicknameInput = document.getElementById('nickname-input');
+            const joinButton = document.getElementById('join-button');
+            const messagesContainer = document.getElementById('messages');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            
+            let socket = null;
+            let nickname = '';
+            
+            // 連接到WebSocket伺服器
+            function connectToServer() {
+                nickname = nicknameInput.value.trim();
+                
+                if (!nickname) {
+                    alert('請輸入暱稱');
+                    return;
+                }
+                
+                // 創建WebSocket連接
+                socket = new WebSocket('ws://127.0.0.1:5000');
+                
+                // 連接建立時
+                socket.onopen = function(e) {
+                    console.log('WebSocket連接已建立');
+                };
+                
+                // 收到訊息時
+                socket.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    
+                    switch(data.type) {
+                        case 'request_nickname':
+                            // 伺服器請求暱稱，發送暱稱
+                            socket.send(JSON.stringify({
+                                type: 'set_nickname',
+                                nickname: nickname
+                            }));
+                            break;
+                            
+                        case 'connected':
+                            // 連接成功，顯示聊天界面
+                            loginScreen.classList.add('hidden');
+                            chatScreen.classList.remove('hidden');
+                            addSystemMessage(data.message);
+                            messageInput.focus();
+                            break;
+                            
+                        case 'chat_message':
+                            // 顯示其他人的聊天訊息
+                            addChatMessage(data.nickname, data.message, false);
+                            break;
+                            
+                        case 'self_message':
+                            // 顯示自己發送的聊天訊息
+                            addChatMessage(data.nickname, data.message, true);
+                            break;
+                            
+                        case 'user_joined':
+                            // 顯示使用者加入訊息
+                            addSystemMessage(data.message, 'user-joined');
+                            break;
+                            
+                        case 'user_left':
+                            // 顯示使用者離開訊息
+                            addSystemMessage(data.message, 'user-left');
+                            break;
+                    }
+                };
+                
+                // 連接關閉時
+                socket.onclose = function(event) {
+                    if (event.wasClean) {
+                        addSystemMessage(`連接已關閉，代碼=${event.code} 原因=${event.reason}`);
+                    } else {
+                        // 例如伺服器進程被殺死或網路中斷
+                        addSystemMessage('❌ 連接中斷');
+                    }
+                };
+                
+                // 連接錯誤時
+                socket.onerror = function(error) {
+                    addSystemMessage(`❌ 連接錯誤: ${error.message}`);
+                };
+            }
+            
+            // 添加系統訊息
+            function addSystemMessage(message, className = '') {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('system-message');
+                if (className) {
+                    messageElement.classList.add(className);
+                }
+                messageElement.textContent = message;
+                messagesContainer.appendChild(messageElement);
+                scrollToBottom();
+            }
+            
+            // 添加聊天訊息
+            function addChatMessage(sender, message, isSelf) {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message');
+                
+                // 根據是否為自己發送的訊息添加不同的樣式
+                if (isSelf) {
+                    messageElement.classList.add('message-self');
+                    messageElement.textContent = `${message}`;
+                } else {
+                    messageElement.classList.add('message-others');
+                    messageElement.textContent = `${sender}: ${message}`;
+                }
+                
+                messagesContainer.appendChild(messageElement);
+                scrollToBottom();
+            }
+            
+            // 滾動到底部
+            function scrollToBottom() {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+            
+            // 發送訊息
+            function sendMessage() {
+                const message = messageInput.value.trim();
+                
+                if (!message) {
+                    return;
+                }
+                
+                if (message.toLowerCase() === '/quit') {
+                    socket.close();
+                    addSystemMessage('👋 已離開聊天室');
+                    setTimeout(() => {
+                        loginScreen.classList.remove('hidden');
+                        chatScreen.classList.add('hidden');
+                        messagesContainer.innerHTML = '';
+                    }, 2000);
+                } else {
+                    socket.send(JSON.stringify({
+                        type: 'chat_message',
+                        message: message
+                    }));
+                    
+                    // 清空輸入框
+                    messageInput.value = '';
+                }
+            }
+            
+            // 事件監聽器
+            joinButton.addEventListener('click', connectToServer);
+            
+            nicknameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    connectToServer();
+                }
+            });
+            
+            sendButton.addEventListener('click', sendMessage);
+            
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
