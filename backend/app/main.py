@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 # 掛載 REST API 路由
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router)
 
 # 整合 Socket.IO
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

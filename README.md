@@ -4,6 +4,14 @@
 
 安裝docker
 
-輸入指令：docker-compose up -d --build
+重新建置指令：
+
+docker-compose down
+
+docker-compose build --no-cache backend
+
+docker-compose up -d
+
+docker-compose logs -f backend
 
 測試API：http://localhost:8000/docs
